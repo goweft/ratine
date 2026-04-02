@@ -1,0 +1,40 @@
+<svg width="1280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="680" height="280" rx="12" fill="#f8f7f4"/>
+<g transform="translate(60, 40)">
+  <line x1="0" y1="25" x2="180" y2="25" stroke="#1D9E75" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="50" x2="180" y2="50" stroke="#1D9E75" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="75" x2="180" y2="75" stroke="#E24B4A" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="100" x2="180" y2="100" stroke="#1D9E75" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="125" x2="180" y2="125" stroke="#E24B4A" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="150" x2="180" y2="150" stroke="#1D9E75" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="175" x2="180" y2="175" stroke="#E24B4A" stroke-width="1.5" opacity="0.7"/>
+  <line x1="0" y1="200" x2="180" y2="200" stroke="#1D9E75" stroke-width="1.5" opacity="0.7"/>
+  <rect x="68" y="5" width="8" height="210" rx="2" fill="#378ADD" opacity="0.3"/>
+  <rect x="70" y="5" width="4" height="210" rx="1" fill="#378ADD" opacity="0.6"/>
+  <g stroke="#E24B4A" stroke-width="2" stroke-linecap="round" opacity="0.9">
+    <line x1="66" y1="71" x2="78" y2="79"/>
+    <line x1="78" y1="71" x2="66" y2="79"/>
+    <line x1="66" y1="121" x2="78" y2="129"/>
+    <line x1="78" y1="121" x2="66" y2="129"/>
+    <line x1="66" y1="171" x2="78" y2="179"/>
+    <line x1="78" y1="171" x2="66" y2="179"/>
+  </g>
+  <g opacity="0.5">
+    <line x1="76" y1="25" x2="180" y2="25" stroke="#1D9E75" stroke-width="1.5"/>
+    <line x1="76" y1="50" x2="180" y2="50" stroke="#1D9E75" stroke-width="1.5"/>
+    <line x1="76" y1="100" x2="180" y2="100" stroke="#1D9E75" stroke-width="1.5"/>
+    <line x1="76" y1="150" x2="180" y2="150" stroke="#1D9E75" stroke-width="1.5"/>
+    <line x1="76" y1="200" x2="180" y2="200" stroke="#1D9E75" stroke-width="1.5"/>
+  </g>
+  <line x1="76" y1="75" x2="95" y2="78" stroke="#888780" stroke-width="1" stroke-dasharray="2 2" opacity="0.4"/>
+  <line x1="76" y1="125" x2="98" y2="128" stroke="#888780" stroke-width="1" stroke-dasharray="2 2" opacity="0.4"/>
+  <line x1="76" y1="175" x2="92" y2="178" stroke="#888780" stroke-width="1" stroke-dasharray="2 2" opacity="0.4"/>
+  <path d="M67 96 L72 92 L77 96 L77 106 C77 110 72 114 72 114 C72 114 67 110 67 106Z" fill="none" stroke="#378ADD" stroke-width="1.5" opacity="0.8"/>
+</g>
+<text x="280" y="110" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="500" fill="#2c2c2a" letter-spacing="-1">ratine</text>
+<text x="280" y="145" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="400" fill="#5f5e5a">agent memory poisoning detector</text>
+<text x="280" y="185" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="400" fill="#888780">detects where the twist went wrong</text>
+<text x="280" y="202" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="400" fill="#888780">injected instructions, hidden payloads, belief drift</text>
+<rect x="280" y="222" width="56" height="22" rx="4" fill="#f1efe8" stroke="#d3d1c7" stroke-width="0.5"/>
+<text x="308" y="237" font-family="monospace" font-size="10" font-weight="400" fill="#888780" text-anchor="middle">goweft</text>
+</svg>
