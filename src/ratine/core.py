@@ -574,11 +574,14 @@ DIM = "\033[2m"
 
 
 def _safe_excerpt(line: str, max_len: int = 80) -> str:
-    """Truncate a line for safe display, redacting potential secrets."""
-    line = line.strip()
-    if len(line) > max_len:
-        return line[:max_len] + "..."
-    return line
+    """Truncate a line for safe display, redacting known secret patterns."""
+    raw = line.strip().encode("utf-8", errors="replace")
+    for pattern, _ in MEMORY_SECRET_PATTERNS:
+        raw = pattern.sub(b"[REDACTED]", raw)
+    redacted = raw.decode("utf-8", errors="replace")
+    if len(redacted) > max_len:
+        return redacted[:max_len] + "..."
+    return redacted
 
 
 def _severity_label(sev: Severity) -> str:
