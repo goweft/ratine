@@ -124,6 +124,8 @@ Use `ratine discover` to auto-detect all known agent memory directories.
 | At runtime | [**heddle**](https://github.com/goweft/heddle) | Policy-and-trust layer for MCP tool servers |
 | Across sessions | **ratine** | Agent memory poisoning detector (this tool) |
 
+- **[crocking](https://github.com/goweft/crocking)** — AI authorship detector for git repositories
+
 ## License
 
 MIT - see [LICENSE](LICENSE).
