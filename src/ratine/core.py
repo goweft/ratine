@@ -351,10 +351,16 @@ class MemoryGuard:
 
         return report
 
+    # Maximum file size to scan (10 MB). Files larger than this are skipped
+    # to avoid reading adversarially large memory files into RAM.
+    MAX_FILE_BYTES = 10 * 1024 * 1024
+
     def _scan_file(self, report: MemoryReport, fpath: Path, rel_path: str,
                    file_hashes: dict):
         """Scan a single memory file for poisoning indicators."""
         try:
+            if fpath.stat().st_size > self.MAX_FILE_BYTES:
+                return
             raw = fpath.read_bytes()
         except OSError:
             return
