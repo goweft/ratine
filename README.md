@@ -39,6 +39,8 @@ ratine diff baseline.json current.json
 ratine scan ~/.openclaw/memory/ --format json
 ```
 
+<p align="center"><img src="demo.svg" alt="ratine demo" width="660"></p>
+
 ## What It Detects
 
 ### Memory Poisoning (MEM-001)
