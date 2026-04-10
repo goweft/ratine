@@ -471,7 +471,71 @@ class TestAllowlist(unittest.TestCase):
             self.assertEqual(len(report.findings), 0)
 
 
+class TestCustomPatterns(unittest.TestCase):
+    def test_custom_pattern_fires(self):
+        """A custom_patterns entry in config should produce a finding."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text(
+                "corp-api-key: ACME_SECRET_abc123\n"
+            )
+            guard = MemoryGuard(config={
+                "custom_patterns": [
+                    {
+                        "pattern": "ACME_SECRET_[A-Za-z0-9]+",
+                        "description": "Acme corp API key",
+                        "severity": "CRITICAL",
+                        "rule_id": "CUSTOM-001",
+                    }
+                ]
+            })
+            report = guard.scan(d)
+            rules = [f.rule_id for f in report.findings]
+            self.assertIn("CUSTOM-001", rules)
+            msgs = [f.message for f in report.findings]
+            self.assertIn("Acme corp API key", msgs)
+
+    def test_custom_pattern_severity_respected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("internal-token: xyz\n")
+            guard = MemoryGuard(config={
+                "custom_patterns": [
+                    {"pattern": "internal-token", "severity": "HIGH", "rule_id": "CUSTOM-002"}
+                ]
+            })
+            report = guard.scan(d)
+            custom = [f for f in report.findings if f.rule_id == "CUSTOM-002"]
+            self.assertEqual(len(custom), 1)
+            self.assertEqual(custom[0].severity, Severity.HIGH)
+
+    def test_invalid_custom_pattern_skipped(self):
+        """A malformed regex in custom_patterns must not crash the scanner."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("normal content\n")
+            guard = MemoryGuard(config={
+                "custom_patterns": [
+                    {"pattern": "[invalid(regex", "description": "bad", "severity": "HIGH"}
+                ]
+            })
+            report = guard.scan(d)
+            self.assertEqual(report.health_score, 100)
+
+    def test_no_custom_patterns_when_config_empty(self):
+        guard = MemoryGuard()
+        self.assertEqual(guard._custom_patterns, [])
+
 class TestDiscover(unittest.TestCase):
+    def test_windsurf_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".windsurf").mkdir()
+            from ratine.core import detect_agent_type
+            self.assertEqual(detect_agent_type(Path(d)), "windsurf")
+
+    def test_gemini_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".gemini").mkdir()
+            from ratine.core import detect_agent_type
+            self.assertEqual(detect_agent_type(Path(d)), "gemini")
+
     def test_discover_returns_list(self):
         result = MemoryGuard.discover()
         self.assertIsInstance(result, list)
@@ -516,6 +580,34 @@ class TestFormatting(unittest.TestCase):
         self.assertIn("injected.md", output)
         self.assertIn("MEDIUM", output)
         self.assertNotIn("No drift detected", output)
+
+    def test_no_color_does_not_mutate_globals(self):
+        """Calling format_memory_report(use_color=False) must not corrupt
+        module-level RESET/BOLD/DIM for subsequent colored renders."""
+        import ratine.core as core
+        original_reset = core.RESET
+        original_bold  = core.BOLD
+        original_dim   = core.DIM
+
+        report = MemoryReport(target_path="/tmp/test", health_score=100)
+        format_memory_report(report, use_color=False)
+        format_drift_report(DriftReport(before_path="a", after_path="b"), use_color=False)
+
+        self.assertEqual(core.RESET, original_reset, "RESET was mutated")
+        self.assertEqual(core.BOLD,  original_bold,  "BOLD was mutated")
+        self.assertEqual(core.DIM,   original_dim,   "DIM was mutated")
+
+    def test_color_and_no_color_output_differ(self):
+        """Colored and non-colored renders of the same report must differ."""
+        report = MemoryReport(target_path="/tmp/test", health_score=100)
+        report.findings.append(Finding(
+            rule_id="MEM-001", severity=Severity.CRITICAL,
+            file_path="mem.md", message="Test",
+        ))
+        colored   = format_memory_report(report, use_color=True)
+        colorless = format_memory_report(report, use_color=False)
+        self.assertIn("\033[", colored)
+        self.assertNotIn("\033[", colorless)
 
 class TestCLI(unittest.TestCase):
     def test_no_args(self):

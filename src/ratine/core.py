@@ -217,11 +217,13 @@ URL_PATTERNS = [
 
 # Agent type detection
 AGENT_SIGNATURES = {
-    "openclaw": [".openclaw", "clawd", ".clawdbot", "MEMORY.md", "memory/"],
-    "claude_code": [".claude", "CLAUDE.md", ".claude/settings.json"],
-    "cursor": [".cursor", ".cursor/rules"],
-    "codex": [".codex", "AGENTS.md"],
-    "generic": [],
+    "openclaw":   [".openclaw", "clawd", ".clawdbot", "MEMORY.md", "memory/"],
+    "claude_code":[".claude", "CLAUDE.md", ".claude/settings.json"],
+    "cursor":     [".cursor", ".cursor/rules"],
+    "codex":      [".codex", "AGENTS.md"],
+    "windsurf":   [".windsurf", ".windsurf/memories"],
+    "gemini":     [".gemini", ".gemini/memories", ".gemini/settings.json"],
+    "generic":    [],
 }
 
 # Files to always ignore
@@ -307,6 +309,41 @@ class MemoryGuard:
         self.config = config or {}
         self.allowlist = self.config.get("allowlist", [])
         self._max_file_bytes = max_file_bytes if max_file_bytes is not None else self.MAX_FILE_BYTES
+        self._custom_patterns = self._load_custom_patterns()
+
+    def _load_custom_patterns(self) -> list:
+        """Compile custom patterns from .ratine.json config.
+
+        Expected format::
+
+            {
+              "custom_patterns": [
+                {
+                  "pattern": "(?i)my-corp-secret",
+                  "description": "Corp-specific secret token",
+                  "severity": "CRITICAL",
+                  "rule_id": "CUSTOM-001"
+                }
+              ]
+            }
+
+        Patterns that fail to compile are silently skipped.
+        Valid severity values: CRITICAL, HIGH, MEDIUM, LOW, INFO.
+        """
+        raw = self.config.get("custom_patterns", [])
+        compiled = []
+        sev_map = {s.value: s for s in Severity}
+        for entry in raw:
+            pat_str = entry.get("pattern", "")
+            desc    = entry.get("description", "Custom pattern match")
+            sev_str = entry.get("severity", "MEDIUM").upper()
+            rule_id = entry.get("rule_id", "CUSTOM")
+            sev = sev_map.get(sev_str, Severity.MEDIUM)
+            try:
+                compiled.append((re.compile(pat_str), desc, sev, rule_id))
+            except re.error:
+                pass
+        return compiled
 
     def _is_allowlisted(self, rel_path: str) -> bool:
         return any(glob_match(rel_path, p) for p in self.allowlist)
@@ -419,6 +456,20 @@ class MemoryGuard:
                         line_number=i,
                     ))
                     break
+
+        # Check custom patterns from .ratine.json
+        for pattern, description, severity, rule_id in self._custom_patterns:
+            for i, line in enumerate(lines, 1):
+                if pattern.search(line):
+                    report.findings.append(Finding(
+                        rule_id=rule_id,
+                        severity=severity,
+                        file_path=rel_path,
+                        message=description,
+                        detail=_safe_excerpt(line),
+                        line_number=i,
+                    ))
+                    break  # One finding per pattern per file
 
         # Check for secrets (binary patterns)
         for pattern, description in MEMORY_SECRET_PATTERNS:
@@ -559,12 +610,14 @@ class MemoryGuard:
         """Auto-discover known agent memory directories."""
         home = Path.home()
         candidates = [
-            (home / ".openclaw", "openclaw"),
-            (home / "clawd", "openclaw"),
-            (home / ".clawdbot", "openclaw"),
-            (home / ".claude", "claude_code"),
-            (home / ".cursor", "cursor"),
-            (home / ".codex", "codex"),
+            (home / ".openclaw",  "openclaw"),
+            (home / "clawd",      "openclaw"),
+            (home / ".clawdbot",  "openclaw"),
+            (home / ".claude",    "claude_code"),
+            (home / ".cursor",    "cursor"),
+            (home / ".codex",     "codex"),
+            (home / ".windsurf",  "windsurf"),
+            (home / ".gemini",    "gemini"),
         ]
         found = []
         for path, agent in candidates:
@@ -596,14 +649,13 @@ def _severity_label(sev: Severity) -> str:
 
 
 def format_memory_report(report: MemoryReport, use_color: bool = True) -> str:
-    if not use_color:
-        # Strip ANSI for non-color output
-        global RESET, BOLD, DIM
-        RESET = BOLD = DIM = ""
+    _reset = RESET if use_color else ""
+    _bold  = BOLD  if use_color else ""
+    _dim   = DIM   if use_color else ""
 
     lines = []
     lines.append("")
-    lines.append(f"{BOLD}═══ ratine memory scan ═══{RESET}")
+    lines.append(f"{_bold}═══ ratine memory scan ═══{_reset}")
     lines.append(f"  Agent type: {report.agent_type}")
     lines.append(f"  Path: {report.target_path}")
     lines.append(f"  Files: {report.total_files}")
@@ -638,30 +690,31 @@ def format_memory_report(report: MemoryReport, use_color: bool = True) -> str:
         if not findings:
             continue
 
+        sev_color = sev.color if use_color else ""
         lines.append(f"")
-        lines.append(f"  {sev.color}{BOLD}┌─ {sev.value} ({len(findings)}){RESET}")
+        lines.append(f"  {sev_color}{_bold}┌─ {sev.value} ({len(findings)}){_reset}")
         for f in findings:
             marker = "✖" if sev in (Severity.CRITICAL, Severity.HIGH) else "⚠"
-            lines.append(f"  {sev.color}│ {marker} [{f.rule_id}] {f.file_path}{RESET}")
-            lines.append(f"  {DIM}│   {f.message}{RESET}")
+            lines.append(f"  {sev_color}│ {marker} [{f.rule_id}] {f.file_path}{_reset}")
+            lines.append(f"  {_dim}│   {f.message}{_reset}")
             if f.detail:
-                lines.append(f"  {DIM}│   {f.detail}{RESET}")
+                lines.append(f"  {_dim}│   {f.detail}{_reset}")
             if f.line_number:
-                lines.append(f"  {DIM}│   Line {f.line_number}{RESET}")
-        lines.append(f"  {sev.color}└{'─' * 45}{RESET}")
+                lines.append(f"  {_dim}│   Line {f.line_number}{_reset}")
+        lines.append(f"  {sev_color}└{'─' * 45}{_reset}")
 
     lines.append(f"")
     return "\n".join(lines)
 
 
 def format_drift_report(report: DriftReport, use_color: bool = True) -> str:
-    if not use_color:
-        global RESET, BOLD, DIM
-        RESET = BOLD = DIM = ""
+    _reset = RESET if use_color else ""
+    _bold  = BOLD  if use_color else ""
+    _dim   = DIM   if use_color else ""
 
     lines = []
     lines.append("")
-    lines.append(f"{BOLD}═══ ratine drift report ═══{RESET}")
+    lines.append(f"{_bold}═══ ratine drift report ═══{_reset}")
     lines.append(f"  Before: {report.before_path}")
     lines.append(f"  After:  {report.after_path}")
     lines.append(f"  Added: {report.files_added}  Removed: {report.files_removed}  Modified: {report.files_modified}")
@@ -694,15 +747,16 @@ def format_drift_report(report: DriftReport, use_color: bool = True) -> str:
         if not findings:
             continue
 
+        sev_color = sev.color if use_color else ""
         lines.append(f"")
-        lines.append(f"  {sev.color}{BOLD}┌─ {sev.value} ({len(findings)}){RESET}")
+        lines.append(f"  {sev_color}{_bold}┌─ {sev.value} ({len(findings)}){_reset}")
         for f in findings:
             marker = "✖" if sev in (Severity.CRITICAL, Severity.HIGH) else "⚠"
-            lines.append(f"  {sev.color}│ {marker} [{f.rule_id}] {f.file_path}{RESET}")
-            lines.append(f"  {DIM}│   {f.message}{RESET}")
+            lines.append(f"  {sev_color}│ {marker} [{f.rule_id}] {f.file_path}{_reset}")
+            lines.append(f"  {_dim}│   {f.message}{_reset}")
             if f.detail:
-                lines.append(f"  {DIM}│   {f.detail}{RESET}")
-        lines.append(f"  {sev.color}└{'─' * 45}{RESET}")
+                lines.append(f"  {_dim}│   {f.detail}{_reset}")
+        lines.append(f"  {sev_color}└{'─' * 45}{_reset}")
 
     lines.append(f"")
     return "\n".join(lines)
