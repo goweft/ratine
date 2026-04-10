@@ -303,9 +303,10 @@ def is_base64_valid(s: str) -> bool:
 class MemoryGuard:
     """Scans agent memory for poisoning indicators."""
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[dict] = None, max_file_bytes: Optional[int] = None):
         self.config = config or {}
         self.allowlist = self.config.get("allowlist", [])
+        self._max_file_bytes = max_file_bytes if max_file_bytes is not None else self.MAX_FILE_BYTES
 
     def _is_allowlisted(self, rel_path: str) -> bool:
         return any(glob_match(rel_path, p) for p in self.allowlist)
@@ -359,7 +360,7 @@ class MemoryGuard:
                    file_hashes: dict):
         """Scan a single memory file for poisoning indicators."""
         try:
-            if fpath.stat().st_size > self.MAX_FILE_BYTES:
+            if fpath.stat().st_size > self._max_file_bytes:
                 return
             raw = fpath.read_bytes()
         except OSError:
@@ -725,6 +726,10 @@ def main() -> int:
     scan_p.add_argument("--fail-on", choices=["critical", "high", "medium", "low", "info"],
                         default="high")
     scan_p.add_argument("--no-color", action="store_true")
+    scan_p.add_argument(
+        "--max-file-size", type=int, default=None, metavar="MB",
+        help="Skip files larger than this size in MB (default: 10)",
+    )
 
     # snapshot
     snap_p = sub.add_parser("snapshot", help="Take a memory state snapshot")
@@ -757,7 +762,10 @@ def main() -> int:
         except (json.JSONDecodeError, OSError):
             pass
 
-    guard = MemoryGuard(config=config)
+    max_file_bytes = None
+    if hasattr(args, "max_file_size") and args.max_file_size is not None:
+        max_file_bytes = args.max_file_size * 1024 * 1024
+    guard = MemoryGuard(config=config, max_file_bytes=max_file_bytes)
 
     if args.command == "scan":
         report = guard.scan(args.target)
