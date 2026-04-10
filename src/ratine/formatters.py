@@ -1,5 +1,6 @@
 """ratine.formatters — Human, JSON, and SARIF output formatters."""
 import json
+from typing import Optional
 
 from ratine._version import __version__
 from ratine.models import Severity, Finding, MemoryReport, DriftReport
@@ -66,7 +67,7 @@ def _finding_to_sarif_result(f: Finding) -> dict:
     return result
 
 
-def format_sarif(findings: list, tool_extra: dict | None = None) -> str:
+def format_sarif(findings: list, tool_extra: Optional[dict] = None) -> str:
     """Serialise a list of Finding objects to a SARIF 2.1.0 JSON string.
 
     Suitable for both MemoryReport.findings and DriftReport.findings.
