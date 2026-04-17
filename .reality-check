@@ -1,0 +1,3 @@
+TEST_CMD="pytest"
+CODE_GLOB="*.py"
+KEY_DIRS="src tests"
