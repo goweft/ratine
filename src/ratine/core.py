@@ -30,3 +30,4 @@ from ratine.formatters import (                                              # n
     format_memory_report, format_drift_report, format_sarif,
 )
 from ratine.cli import main                                                  # noqa: F401
+from ratine.semantic import SemanticAnalyzer  # noqa: F401

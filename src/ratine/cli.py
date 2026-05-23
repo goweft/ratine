@@ -32,6 +32,10 @@ def main() -> int:
         "--max-file-size", type=int, default=None, metavar="MB",
         help="Skip files larger than this size in MB (default: 10)",
     )
+    scan_p.add_argument(
+        "--semantic", action="store_true",
+        help="Use LLM to classify ambiguous findings (requires RATINE_LLM_API_KEY)",
+    )
 
     # snapshot
     snap_p = sub.add_parser("snapshot", help="Take a memory state snapshot")
@@ -93,6 +97,12 @@ def main() -> int:
 
     if args.command == "scan":
         report = guard.scan(args.target)
+
+        if getattr(args, "semantic", False):
+            from ratine.semantic import SemanticAnalyzer
+            analyzer = SemanticAnalyzer(config.get("semantic", {}))
+            report.findings = analyzer.analyze(report.findings, Path(args.target))
+            report.health_score = max(0, 100 - sum(f.severity.weight for f in report.findings))
 
         if args.format == "json":
             print(json.dumps(report.to_dict(), indent=2))

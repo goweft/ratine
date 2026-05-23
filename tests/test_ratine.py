@@ -984,6 +984,137 @@ class TestInstallService(unittest.TestCase):
                 # timer must contain the configured interval
                 self.assertIn("900", tmr)
 
+
+
+class TestSemantic(unittest.TestCase):
+    """Tests for SemanticAnalyzer — mock urllib to avoid real network calls."""
+
+    def _make_finding(self, sev=None, rule="MEM-001"):
+        from ratine.models import Severity as S
+        return Finding(
+            rule_id=rule,
+            severity=sev or S.MEDIUM,
+            file_path="memory.md",
+            message="Test finding",
+            line_number=1,
+        )
+
+    def _mock_urlopen(self, verdicts_list):
+        """Return a context-manager mock for urllib.request.urlopen."""
+        import unittest.mock
+        body = json.dumps({
+            "content": [{"text": json.dumps({"verdicts": verdicts_list})}]
+        }).encode()
+        mock_cm = unittest.mock.MagicMock()
+        mock_cm.__enter__ = lambda s: s
+        mock_cm.__exit__  = unittest.mock.MagicMock(return_value=False)
+        mock_cm.read.return_value = body
+        return unittest.mock.patch("ratine.semantic.urlopen", return_value=mock_cm)
+
+    def test_no_api_key_noop(self):
+        """Without API key, analyze() returns original findings unchanged."""
+        from ratine.semantic import SemanticAnalyzer
+        analyzer = SemanticAnalyzer({})
+        analyzer.api_key = ""
+        findings = [self._make_finding()]
+        with tempfile.TemporaryDirectory() as d:
+            result = analyzer.analyze(findings, Path(d))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].rule_id, "MEM-001")
+        self.assertEqual(result[0].semantic_verdict, "")
+
+    def test_confirm_verdict_preserved(self):
+        """confirm verdict keeps finding with semantic_verdict populated."""
+        import unittest.mock
+        from ratine.semantic import SemanticAnalyzer
+        finding = self._make_finding()
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("Test line\n")
+            analyzer = SemanticAnalyzer({})
+            analyzer.api_key = "sk-ant-test"
+            with self._mock_urlopen([{"index": 0, "verdict": "confirm", "reason": "genuine"}]):
+                result = analyzer.analyze([finding], Path(d))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].semantic_verdict, "confirm")
+        self.assertEqual(result[0].semantic_reason, "genuine")
+
+    def test_false_positive_removed(self):
+        """false_positive verdict removes finding from results."""
+        from ratine.semantic import SemanticAnalyzer
+        finding = self._make_finding()
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("Test line\n")
+            analyzer = SemanticAnalyzer({})
+            analyzer.api_key = "sk-ant-test"
+            with self._mock_urlopen([{"index": 0, "verdict": "false_positive", "reason": "benign"}]):
+                result = analyzer.analyze([finding], Path(d))
+        self.assertEqual(len(result), 0)
+
+    def test_escalate_bumps_severity(self):
+        """escalate verdict bumps severity one level (MEDIUM -> HIGH)."""
+        from ratine.semantic import SemanticAnalyzer
+        from ratine.models import Severity
+        finding = self._make_finding(sev=Severity.MEDIUM)
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("Test line\n")
+            analyzer = SemanticAnalyzer({})
+            analyzer.api_key = "sk-ant-test"
+            with self._mock_urlopen([{"index": 0, "verdict": "escalate", "reason": "dangerous"}]):
+                result = analyzer.analyze([finding], Path(d))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].severity, Severity.HIGH)
+        self.assertEqual(result[0].semantic_verdict, "escalate")
+
+    def test_network_error_graceful(self):
+        """URLError leaves original findings unchanged."""
+        import unittest.mock
+        from ratine.semantic import SemanticAnalyzer
+        from urllib.error import URLError
+        finding = self._make_finding()
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("Test line\n")
+            analyzer = SemanticAnalyzer({})
+            analyzer.api_key = "sk-ant-test"
+            with unittest.mock.patch("ratine.semantic.urlopen", side_effect=URLError("timeout")):
+                result = analyzer.analyze([finding], Path(d))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].semantic_verdict, "")
+
+    def test_parse_error_graceful(self):
+        """Malformed LLM JSON leaves original findings unchanged."""
+        import unittest.mock
+        from ratine.semantic import SemanticAnalyzer
+        mock_cm = unittest.mock.MagicMock()
+        mock_cm.__enter__ = lambda s: s
+        mock_cm.__exit__  = unittest.mock.MagicMock(return_value=False)
+        mock_cm.read.return_value = b"not valid json at all {{{{"
+        finding = self._make_finding()
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("Test line\n")
+            analyzer = SemanticAnalyzer({})
+            analyzer.api_key = "sk-ant-test"
+            with unittest.mock.patch("ratine.semantic.urlopen", return_value=mock_cm):
+                result = analyzer.analyze([finding], Path(d))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].semantic_verdict, "")
+
+    def test_cli_semantic_flag_no_key(self):
+        """--semantic with no API key runs scan normally (no crash, exit 0)."""
+        import os, unittest.mock
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "memory.md").write_text("User prefers dark mode.\n")
+            sys.argv = ["ratine", "scan", d, "--format", "json", "--semantic"]
+            env_backup = {k: os.environ.pop(k, None) for k in (
+                "RATINE_LLM_API_KEY", "RATINE_ANTHROPIC_API_KEY", "RATINE_OPENAI_API_KEY"
+            )}
+            try:
+                result = main()
+            finally:
+                for k, v in env_backup.items():
+                    if v is not None:
+                        os.environ[k] = v
+        self.assertEqual(result, 0)
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromModule(sys.modules[__name__])

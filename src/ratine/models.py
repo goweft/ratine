@@ -36,12 +36,14 @@ class Severity(Enum):
 
 @dataclass
 class Finding:
-    rule_id:     str
-    severity:    Severity
-    file_path:   str
-    message:     str
-    detail:      str = ""
-    line_number: int = 0
+    rule_id:          str
+    severity:         Severity
+    file_path:        str
+    message:          str
+    detail:           str = ""
+    line_number:      int = 0
+    semantic_verdict: str = ""   # "confirm" | "false_positive" | "escalate" | ""
+    semantic_reason:  str = ""
 
     def to_dict(self) -> dict:
         d = {
@@ -54,6 +56,10 @@ class Finding:
             d["detail"] = self.detail
         if self.line_number:
             d["line_number"] = self.line_number
+        if self.semantic_verdict:
+            d["semantic_verdict"] = self.semantic_verdict
+        if self.semantic_reason:
+            d["semantic_reason"]  = self.semantic_reason
         return d
 
 

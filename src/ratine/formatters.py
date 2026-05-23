@@ -144,6 +144,8 @@ def format_memory_report(report: MemoryReport, use_color: bool = True) -> str:
                 lines.append(f"  {_dim}│   {f.detail}{_reset}")
             if f.line_number:
                 lines.append(f"  {_dim}│   Line {f.line_number}{_reset}")
+            if getattr(f, "semantic_verdict", ""):
+                lines.append(f"  {_dim}│   semantic: {f.semantic_verdict} — {f.semantic_reason}{_reset}")
         lines.append(f"  {sev_color}└{'─' * 45}{_reset}")
 
     lines.append("")
