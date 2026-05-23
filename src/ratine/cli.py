@@ -1,7 +1,10 @@
 """ratine.cli — Command-line interface."""
 import argparse
+import datetime
+import io
 import json
 import sys
+import time
 from pathlib import Path
 
 from ratine._version import __version__
@@ -46,6 +49,28 @@ def main() -> int:
 
     # discover
     sub.add_parser("discover", help="Auto-discover agent memory directories")
+
+    # watch
+    watch_p = sub.add_parser("watch", help="Continuously monitor agent memory for new findings")
+    watch_p.add_argument("target", help="Path to agent memory directory")
+    watch_p.add_argument("--interval", type=int, default=300, metavar="SECONDS",
+                         help="Seconds between scans (default: 300)")
+    watch_p.add_argument("--max-runs", type=int, default=None, metavar="N",
+                         help="Stop after N scans (default: run forever)")
+    watch_p.add_argument("--fail-on", choices=["critical", "high", "medium", "low", "info"],
+                         default="high")
+    watch_p.add_argument("--format", choices=["human", "json"], default="human")
+    watch_p.add_argument("--no-color", action="store_true")
+
+    # install-service
+    svc_p = sub.add_parser("install-service", help="Install systemd user timer for scheduled scanning")
+    svc_p.add_argument("target", help="Path to agent memory directory to monitor")
+    svc_p.add_argument("--interval", type=int, default=300, metavar="SECONDS",
+                       help="Scan interval in seconds (default: 300)")
+    svc_p.add_argument("--fail-on", choices=["critical", "high", "medium", "low", "info"],
+                       default="high")
+    svc_p.add_argument("--output-dir", default=None, metavar="DIR",
+                       help="Directory for unit files (default: ~/.config/systemd/user/)")
 
     args = parser.parse_args()
 
@@ -117,4 +142,157 @@ def main() -> int:
             print(f"  {d['agent']:15s} {d['path']}")
         return 0
 
+    elif args.command == "watch":
+        _run_watch(
+            guard=guard,
+            target=args.target,
+            interval=args.interval,
+            max_runs=args.max_runs,
+            fail_on=args.fail_on,
+            fmt=args.format,
+            use_color=not args.no_color,
+        )
+        return _watch_exit_code
+
+    elif args.command == "install-service":
+        return _run_install_service(
+            target=args.target,
+            interval=args.interval,
+            fail_on=args.fail_on,
+            output_dir=args.output_dir,
+        )
+
+    return 0
+
+
+# ── Watch helpers ─────────────────────────────────────────────────────────────
+
+_watch_exit_code = 0  # module-level so tests can inspect after main() returns
+
+
+def _run_watch(guard, target, interval, max_runs, fail_on, fmt, use_color,
+               _sleep=None):
+    """Core watch loop — separated so tests can inject a no-op sleep."""
+    global _watch_exit_code
+    _watch_exit_code = 0
+
+    if _sleep is None:
+        _sleep = time.sleep
+
+    severity_order = ["critical", "high", "medium", "low", "info"]
+    threshold = severity_order.index(fail_on)
+
+    bold  = "\033[1m" if use_color else ""
+    dim   = "\033[2m" if use_color else ""
+    reset = "\033[0m" if use_color else ""
+
+    seen: set = set()
+    run = 0
+
+    try:
+        while max_runs is None or run < max_runs:
+            run += 1
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            report = guard.scan(target)
+
+            new_findings = [
+                f for f in report.findings
+                if (f.rule_id, f.file_path, f.line_number) not in seen
+            ]
+            for f in report.findings:
+                seen.add((f.rule_id, f.file_path, f.line_number))
+
+            if fmt == "json":
+                out = {
+                    "run":              run,
+                    "timestamp":        ts,
+                    "health_score":     report.health_score,
+                    "total_files":      report.total_files,
+                    "new_findings_count": len(new_findings),
+                    "new_findings":     [f.to_dict() for f in new_findings],
+                }
+                print(json.dumps(out), flush=True)
+            else:
+                sev_color = ""
+                if new_findings:
+                    worst = min(new_findings, key=lambda f: severity_order.index(f.severity.value.lower()))
+                    sev_color = worst.severity.color if use_color else ""
+                status = (
+                    f"{dim}[{ts}]{reset}  run={run}"
+                    f"  agent={report.agent_type}"
+                    f"  files={report.total_files}"
+                    f"  score={report.health_score}"
+                    f"  new={sev_color}{len(new_findings)}{reset}"
+                )
+                print(status, flush=True)
+                for f in new_findings:
+                    sc = f.severity.color if use_color else ""
+                    loc = f"{f.file_path}:{f.line_number}" if f.line_number else f.file_path
+                    print(f"  {sc}● {f.rule_id} [{f.severity.value}]{reset}  {loc}  {f.message}")
+                    if f.detail:
+                        print(f"    {dim}{f.detail}{reset}")
+
+            for f in new_findings:
+                if severity_order.index(f.severity.value.lower()) <= threshold:
+                    _watch_exit_code = 2
+
+            if max_runs is None or run < max_runs:
+                _sleep(interval)
+
+    except KeyboardInterrupt:
+        print("\nWatch stopped.", flush=True)
+
+
+# ── Install-service helper ────────────────────────────────────────────────────
+
+_SERVICE_TEMPLATE = """[Unit]
+Description=ratine agent memory poisoning scan
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart={ratine_cmd} scan {target} --format json --fail-on {fail_on}
+StandardOutput=journal
+StandardError=journal
+"""
+
+_TIMER_TEMPLATE = """[Unit]
+Description=ratine memory scan — every {interval}s
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec={interval}s
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+"""
+
+
+def _run_install_service(target, interval, fail_on, output_dir):
+    out = Path(output_dir) if output_dir else Path.home() / ".config" / "systemd" / "user"
+    out.mkdir(parents=True, exist_ok=True)
+
+    ratine_cmd = f"{sys.executable} -m ratine"
+    target_abs = str(Path(target).resolve())
+
+    svc_path   = out / "ratine-scan.service"
+    timer_path = out / "ratine-scan.timer"
+
+    svc_path.write_text(_SERVICE_TEMPLATE.format(
+        ratine_cmd=ratine_cmd, target=target_abs, fail_on=fail_on,
+    ))
+    timer_path.write_text(_TIMER_TEMPLATE.format(interval=interval))
+
+    print(f"Installed:")
+    print(f"  {svc_path}")
+    print(f"  {timer_path}")
+    print()
+    print("Enable and start:")
+    print("  systemctl --user daemon-reload")
+    print("  systemctl --user enable --now ratine-scan.timer")
+    print()
+    print("Check status:")
+    print("  systemctl --user status ratine-scan.timer")
+    print("  journalctl --user -u ratine-scan.service -f")
     return 0
