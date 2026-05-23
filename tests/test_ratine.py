@@ -862,7 +862,7 @@ class TestModuleStructure(unittest.TestCase):
         import ratine.scanner
         import ratine.formatters
         import ratine.cli
-        self.assertEqual(ratine._version.__version__, "0.1.0")
+        self.assertEqual(ratine._version.__version__, "0.2.0")
 
     def test_core_reexports_all_symbols(self):
         """ratine.core re-exports every symbol the tests rely on."""
