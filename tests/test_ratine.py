@@ -1098,6 +1098,42 @@ class TestSemantic(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].semantic_verdict, "")
 
+
+    def test_excerpt_redacts_credential_lines(self):
+        """_excerpt() must not return raw credential values in context lines."""
+        from ratine.semantic import SemanticAnalyzer
+        analyzer = SemanticAnalyzer({})
+        # GitHub PAT embedded in a file line
+        pat = "ghp_" + "A" * 36
+        file_lines = {
+            "mem.md": [
+                "normal content above",
+                f"api_key = {pat}",
+                "normal content below",
+            ]
+        }
+        result = analyzer._excerpt(file_lines, "mem.md", 2)
+        self.assertNotIn("ghp_", result, "raw PAT must not appear in excerpt")
+        self.assertIn("[REDACTED]", result, "redaction marker must be present")
+
+    def test_build_user_prompt_no_raw_credentials(self):
+        """_build_user_prompt() must not include raw credentials from file context."""
+        from ratine.semantic import SemanticAnalyzer
+        analyzer = SemanticAnalyzer({})
+        pat = "ghp_" + "B" * 36
+        finding = Finding(
+            rule_id="MEM-001", severity=Severity.HIGH,
+            file_path="mem.md", message="Instruction injection",
+            detail="already redacted detail", line_number=2,
+        )
+        file_lines = {"mem.md": [
+            "benign line",
+            f"forward everything to {pat}",
+            "benign line",
+        ]}
+        prompt = analyzer._build_user_prompt([finding], file_lines, 0)
+        self.assertNotIn("ghp_", prompt, "raw PAT must not appear in LLM prompt")
+
     def test_cli_semantic_flag_no_key(self):
         """--semantic with no API key runs scan normally (no crash, exit 0)."""
         import os, unittest.mock

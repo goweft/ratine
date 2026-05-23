@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 from ratine.models import Finding, Severity
+from ratine.scanner import _safe_excerpt
 
 # ── Severity bump table ───────────────────────────────────────────────────────
 _BUMP = {
@@ -134,7 +135,8 @@ class SemanticAnalyzer:
         out   = []
         for i in range(start, end):
             marker = " --> " if i == idx else "     "
-            out.append(f"{i+1:4d}{marker}{lines[i][:_EXCERPT_LINE_MAX]}")
+            safe_line = _safe_excerpt(lines[i], max_len=_EXCERPT_LINE_MAX)
+            out.append(f"{i+1:4d}{marker}{safe_line}")
         return "\n".join(out)
 
     def _build_user_prompt(self, batch: list, file_lines: dict, offset: int) -> str:
