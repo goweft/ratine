@@ -382,6 +382,10 @@ class MemoryGuard:
             (home / ".codex",     "codex"),
             (home / ".windsurf",  "windsurf"),
             (home / ".gemini",    "gemini"),
+            (home / ".aider",     "aider"),
+            (home / ".continue",  "continue"),
+            (home / ".cody",      "cody"),
+            (home / ".amp",       "amp"),
         ]
         found = []
         for path, agent in candidates:

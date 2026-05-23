@@ -85,6 +85,10 @@ AGENT_SIGNATURES = {
     "codex":       [".codex", "AGENTS.md"],
     "windsurf":    [".windsurf", ".windsurf/memories"],
     "gemini":      [".gemini", ".gemini/memories", ".gemini/settings.json"],
+    "aider":       [".aider.chat.history.md", ".aider.input.history"],
+    "continue":    [".continue", ".continue/sessions"],
+    "cody":        [".cody", ".config/cody"],
+    "amp":         [".amp"],
     "generic":     [],
 }
 

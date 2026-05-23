@@ -537,6 +537,30 @@ class TestDiscover(unittest.TestCase):
             from ratine.core import detect_agent_type
             self.assertEqual(detect_agent_type(Path(d)), "gemini")
 
+    def test_aider_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".aider.chat.history.md").write_text("# chat\n")
+            from ratine.core import detect_agent_type
+            self.assertEqual(detect_agent_type(Path(d)), "aider")
+
+    def test_continue_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".continue").mkdir()
+            from ratine.core import detect_agent_type
+            self.assertEqual(detect_agent_type(Path(d)), "continue")
+
+    def test_cody_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".cody").mkdir()
+            from ratine.core import detect_agent_type
+            self.assertEqual(detect_agent_type(Path(d)), "cody")
+
+    def test_amp_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".amp").mkdir()
+            from ratine.core import detect_agent_type
+            self.assertEqual(detect_agent_type(Path(d)), "amp")
+
     def test_discover_returns_list(self):
         result = MemoryGuard.discover()
         self.assertIsInstance(result, list)
